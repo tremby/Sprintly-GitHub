@@ -777,3 +777,5 @@ def die(message=None, *args):
 if __name__ == '__main__':
     sprintlyTool = SprintlyTool()
     sprintlyTool.run()
+
+# vim: et ts=4 sts=4 sw=4 tw=78 fo-=w

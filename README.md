@@ -117,17 +117,22 @@ With the `commit-msg` hook installed, whenever a commit is made and pushed, a co
 	[master 1e71283] References #4. Normal commit message here.
 	 1 files changed, 1 insertions(+), 1 deletions(-)
 
-To save time, include an item number at the beginning of your commit to automatically reference that item. You won't be prompted to select an item number if you go this route:
+To save time, include an item number at the beginning of your commit to 
+automatically reference that item. You won't be prompted to select an item 
+number if you go this route:
 
 	$ git commit -m "#42 Adding README"
 	[master 555a912] References #42 Adding README
 	 0 files changed, 0 insertions(+), 0 deletions(-)
 	 create mode 100644 README
 
-Or include Sprint.ly keywords followed by an item number anywhere in your message. Again, you won't be prompted to select an item number if you go this route:
+Or include Sprint.ly keywords followed by an item number anywhere in your 
+message. Again, you won't be prompted to select an item number if you go this 
+route:
 
 	$ git commit -m "Adding some samples. Closes #42. Refs #54."
 	[master bfb7a8b] Adding some samples. Closes #42. Refs #54.
 	 0 files changed, 0 insertions(+), 0 deletions(-)
 	 create mode 100644 sample
-	 
+
+vim: ts=4 sts=4 sw=4 noet tw=80 fo=

@@ -143,3 +143,5 @@ if __name__ == '__main__':
         sys.exit(subprocess.call([original_commit_msg, sys.argv[1]]))
     else:
         sys.exit(0)
+
+# vim: et ts=4 sts=4 sw=4 tw=78 fo-=w
