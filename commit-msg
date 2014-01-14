@@ -140,6 +140,6 @@ if __name__ == '__main__':
     # .git/hooks/commit-msg and we want to be in the hooks directory.
     original_commit_msg = os.path.dirname(__file__) + '/commit-msg.original'
     if os.path.exists(original_commit_msg):
-      sys.exit(subprocess.call([original_commit_msg, sys.argv[1]]))
+        sys.exit(subprocess.call([original_commit_msg, sys.argv[1]]))
     else:
-      sys.exit(0)
+        sys.exit(0)
