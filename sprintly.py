@@ -244,7 +244,7 @@ the message and does not support multiple item numbers.
         productCount = len(productMap)
 
         if productCount == 0:
-            raise SprintlyException('It appears that you have no products associated with your Sprint.ly account. Please add at least one and then try again.')
+            raise SprintlyException('It appears that you have no products associated with your Sprint.ly account. Add at least one and then try again.')
         elif productCount == 1:
             self._config['product'] = productMap.values()[0]
         else:
