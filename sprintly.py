@@ -357,7 +357,7 @@ the message and does not support multiple item numbers.
             self.cprint('')
 
         if itemCount == 0:
-            print 'No assigned items'
+            self.cprint('No assigned items', attr=GREEN)
 
     def populateCache(self):
         """
@@ -412,7 +412,7 @@ the message and does not support multiple item numbers.
                     message = ''
                     if 'message' in items:
                         message = ': %s' % items['message']
-                    print 'Warning: unable to get items for %s%s' % (productNameWithUrl, message)
+                    self.cprint('Warning: unable to get items for %s%s' % (productNameWithUrl, message), attr=YELLOW)
                     continue
                 # a 'parent' is any item without a parent key
                 # a 'child' is any item with a parent key
@@ -463,9 +463,7 @@ the message and does not support multiple item numbers.
             cache_file.write(serialized_cache)
             cache_file.close()
         except Exception:
-            print '\033[91m'
-            print 'Unable to populate cache. List may not be up to date.'
-            print '\033[0m'
+            self.cprint('Unable to populate cache. List may not be up to date.', attr=RED)
 
     def readCache(self):
         """
@@ -529,14 +527,14 @@ the message and does not support multiple item numbers.
         except Exception:
             raise SprintlyException('File already exists at %s. Please delete it before proceeding.' % destination)
 
-        print 'Creating symlink...'
+        self.cprint('Creating symlink...')
 
         try:
             os.symlink(HOOK_PATH, destination)
         except Exception:
             raise SprintlyException('Unable to create symlink.')
 
-        print 'Hook was installed at %s' % destination
+        self.cprint('Hook was installed at %s' % destination, attr=GREEN)
 
         # check to see if the email associated with git matches the Sprint.ly email
         # if not, Sprint.ly won't be able to create comments
@@ -544,12 +542,12 @@ the message and does not support multiple item numbers.
             process = subprocess.Popen(['git', 'config', 'user.email'], stdout=subprocess.PIPE)
             gitEmail = process.stdout.read().strip()
             if gitEmail != self._config['user']:
-                print 'WARNING: Your git email (' + gitEmail + ') does not match your Sprint.ly username (' + self._config['user'] + ')'
-                print 'WARNING: Don\'t worry - there is an easy fix. Simply run one of the following:'
-                print '\t\'git config --global user.email ' + self._config['user'] + '\' (all repos)'
-                print '\t\'git config user.email ' + self._config['user'] + '\' (this repo only)'
+                self.cprint('WARNING: Your git email (' + gitEmail + ') does not match your Sprint.ly username (' + self._config['user'] + ')', attr=YELLOW)
+                self.cprint('WARNING: Don\'t worry - there is an easy fix. Simply run one of the following:', attr=YELLOW)
+                self.cprint('\t\'git config --global user.email ' + self._config['user'] + '\' (all repos)')
+                self.cprint('\t\'git config user.email ' + self._config['user'] + '\' (this repo only)')
         except Exception:
-            print 'Unable to verify that \'git config user.email\' matches your Sprint.ly account email.'
+            self.cprint('Unable to verify that \'git config user.email\' matches your Sprint.ly account email.', attr=RED)
 
     def uninstallHook(self):
         """
@@ -572,14 +570,14 @@ the message and does not support multiple item numbers.
             elif os.path.islink(destination):
                 os.unlink(destination)
             else:
-                print 'Hook is already uninstalled.'
+                self.cprint('Hook is already uninstalled.')
                 return
         except SprintlyException as e:
             raise e
         except Exception:
             raise SprintlyException('File already exists at %s. Please delete it before proceeding.' % destination)
 
-        print 'Hook has been uninstalled.'
+        self.cprint('Hook has been uninstalled.', attr=GREEN)
 
     def cprint(self, str, attr=None, trim=True):
         self._term.write(self.render(str, attr, trim) + '\r\n')
