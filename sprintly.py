@@ -312,10 +312,13 @@ the message and does not support multiple item numbers.
             'accepted': {},
         }
 
+        itemCount = 0
+
         for product in products:
             for item in product['items']:
                 if not product['id'] in statusTree[item['status']]:
                     statusTree[item['status']][product['id']] = []
+                    itemCount += 1
 
                 statusTree[item['status']][product['id']].append(item)
 
@@ -352,6 +355,9 @@ the message and does not support multiple item numbers.
                             self.cprint(printChild, attr=attr)
 
             self.cprint('')
+
+        if itemCount == 0:
+            print 'No assigned items'
 
     def populateCache(self):
         """
@@ -408,9 +414,6 @@ the message and does not support multiple item numbers.
                         message = ': %s' % items['message']
                     print 'Warning: unable to get items for %s%s' % (productNameWithUrl, message)
                     continue
-                # if there are no items, display message
-                elif len(items) == 0:
-                    print 'No assigned items for %s' % (productNameWithUrl)
                 # a 'parent' is any item without a parent key
                 # a 'child' is any item with a parent key
                 # sort so that all parents appear first and all children appear after ordered by their number
