@@ -17,55 +17,30 @@ How to use `sprintly`
 	By default, your sprintly items will be shown.
 
 	Options:
-	  -h, --help        show this help message and exit
-	  --install         install this tool
-	  --update          update this tool
-	  --install-hook    install commit-msg hook in current directory (must be a
+	  -h, --help		show this help message and exit
+	  -h, --help		show this help message and exit
+	  --install-hook	install commit-msg hook in current directory (must be a
 						git repository)
-	  --uninstall-hook  uninstall commit-msg hook in current directory (must be a
+	  --uninstall-hook	uninstall commit-msg hook in current directory (must be a
 						git repository)
-	  --update-config   edit configuration
+	  --update-config	edit configuration
 
 Installing `sprintly`
 ---------------------
 
-The `sprintly` tool can now install itself. Follow the instructions below to get 
-started:
+Clone this repository, then run the setup script.
 
-	// download the latest version of the tool
-	curl -O https://raw.github.com/nextbigsoundinc/Sprintly-GitHub/master/sprintly
+	git clone https://github.com/tremby/Sprintly-GitHub.git
+	cd Sprintly-GitHub
+	sudo python setup.py install
 
-	// install
-	sudo python sprintly --install
 
-	// clean up
-	rm sprintly
 
-Once the installation is complete, run `sprintly` from any directory to get 
-started. If you have never used the tool before, it will walk you through adding 
-your Sprint.ly credentials:
 
-	$ sprintly
-	Creating config...
-	Enter sprint.ly username (email): user@company.com
-	Enter sprint.ly API Key: 3536bae19bacd16831fb5100b13e34d2
-	Enter default sprint.ly product id (117 - Company, 129 - Secret): 117
-	Configuration successfully created.
 
-*Note: (1) your Sprint.ly API Key can be found 
-[here](https://sprint.ly/account/profile/). (2) you will only be asked to enter 
-a sprint.ly product id if you have more than one product.*
 
-To update `sprintly`, type `sudo sprintly --update`. When updating, you will see 
-a warning:
 
-	$ sudo sprintly --update
-	Downloading latest version of sprintly tool from GitHub...
-	A file already exists at /usr/local/bin/sprintly. Overwrite file?
 
-Entering `y` will overwrite the old installation with the latest version. *Note: 
-if you have another tool installed at `/usr/local/bin/sprintly`, enter `n` and 
-manually install it under a different name.*
 
 GitHub Integration: Installing the `commit-msg` hook
 ----------------------------------------------------

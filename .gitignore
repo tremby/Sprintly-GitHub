@@ -3,3 +3,5 @@ MANIFEST
 dist
 .project
 .pydevproject
+/build
+/sprintly_github.egg-info
