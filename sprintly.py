@@ -11,6 +11,8 @@ import subprocess
 import re
 import string
 import logging
+import dulwich.repo
+import dulwich.config
 from curses import setupterm, tigetstr, tigetnum, tparm
 from time import time
 from optparse import OptionParser
@@ -107,7 +109,32 @@ class SprintlyTool:
         """
 
         try:
-            usage = 'Usage: %prog [options]\n\nBy default, your Sprint.ly items will be shown.\n\nWhen using the commit-msg hook, you will be prompted for a Sprint.ly item number unless you include a Sprint.ly keyword/item number in your commit message:\n\n  \'Commit message goes here. References #54. Closes #65.\'\n\nValid Sprint.ly keywords are:\n\n  close, closes, closed, fix, fixed, fixes, addresses, re, ref, refs, references, see, breaks, unfixes, reopen, reopens, re-open, re-opens\n\nAs a shortcut, you may also include an item number as the first word in your commit message:\n\n  \'#26 Message goes here\'\n\nThe hook will automatically prepend the keyword \'references\' and you won\'t be asked to provide an item number. This shortcut only works at the beginning of the message and does not support multiple item numbers.'
+            usage = textwrap.dedent('''\
+            usage = '''\
+%prog [options]
+
+By default, your Sprint.ly items will be shown.
+
+When using the commit-msg hook, you will be prompted for a Sprint.ly item
+number unless you include a Sprint.ly keyword/item number in your commit
+message:
+
+  'Commit message goes here. References #54. Closes #65.'
+
+Valid Sprint.ly keywords are:
+
+  close, closes, closed, fix, fixed, fixes, addresses, re, ref, refs,
+  references, see, breaks, unfixes, reopen, reopens, re-open, re-opens
+
+As a shortcut, you may also include an item number as the first word in your
+commit message:
+
+  '#26 Message goes here'
+
+The hook will automatically prepend the keyword 'references' and you won't be
+asked to provide an item number. This shortcut only works at the beginning of
+the message and does not support multiple item numbers.
+'''
             parser = OptionParser(usage=usage)
             parser.add_option('--install', dest='install', help='install this tool', action='store_true', default=False)
             parser.add_option('--update', dest='update', help='update this tool', action='store_true', default=False)
