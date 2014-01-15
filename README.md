@@ -23,7 +23,6 @@ How to use `sprintly`
 						git repository)
 	  --uninstall-hook	uninstall commit-msg hook in current directory (must be a
 						git repository)
-	  --update-config	edit configuration
 
 Installing `sprintly`
 ---------------------
@@ -78,20 +77,6 @@ repository in question and run:
 	$ sprintly --uninstall-hook
 	Hook has been uninstalled.
 
-Changing the Configuration
---------------------------
-
-If, at some point, you wish to change your configuration (you get a new 
-username, API key, or wish to change the default product), type `sprintly 
---update-config`. Pro tip: you don't have to re-type everything just to change 
-your API Key. Simply press enter to keep the old version of any individual item:
-
-	$ sprintly --update-config
-	Updating config... Press enter to accept default value shown in brackets.
-	Enter sprint.ly username (email) [user@company.com]:
-	Enter sprint.ly API Key [3536bae19bacd16831fb5100b13e34d2]: 5c11931f26b4c5f6a435983d1a734839
-	Enter default sprint.ly product id (117 - Company, 129 - Secret):
-	Configuration successfully updated.
 
 Sample Output
 -------------

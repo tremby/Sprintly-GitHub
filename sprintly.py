@@ -26,15 +26,10 @@ logger = logging.getLogger(__name__)
 
 # constants
 CONFIG_VERSION = '2.1'
-SPRINTLY_NAME = 'sprintly'
-SPRINTLY_DIR = '/usr/local/bin/'
 HOOK_NAME = 'commit-msg'
 HOOK_DIR = os.path.dirname(__file__)
-SPRINTLY_SOURCE_URL = 'https://raw.github.com/nextbigsoundinc/Sprintly-GitHub/master/sprintly'
-COMMIT_MSG_SOURCE_URL = 'https://raw.github.com/nextbigsoundinc/Sprintly-GitHub/master/commit-msg'
 
 # non-editable constants
-SPRINTLY_PATH = SPRINTLY_DIR + SPRINTLY_NAME
 HOOK_PATH = os.path.join(HOOK_DIR, HOOK_NAME)
 
 # tty colors
@@ -136,101 +131,24 @@ asked to provide an item number. This shortcut only works at the beginning of
 the message and does not support multiple item numbers.
 '''
             parser = OptionParser(usage=usage)
-            parser.add_option('--install', dest='install', help='install this tool', action='store_true', default=False)
-            parser.add_option('--update', dest='update', help='update this tool', action='store_true', default=False)
             parser.add_option('--install-hook', dest='installHook', help='install commit-msg hook in current directory (must be a git repository)', action='store_true', default=False)
             parser.add_option('--uninstall-hook', dest='uninstallHook', help='uninstall commit-msg hook in current directory (must be a git repository)', action='store_true', default=False)
-            parser.add_option('--update-config', dest='updateConfig', help='edit configuration', action='store_true', default=False)
 
             (options, _) = parser.parse_args()
-
-            # if the user wants to install, do it before we initialize (they will re-run once installed)
-            if options.install or options.update:
-                try:
-                    self.install(options.update)
-                except SprintlyException as se:
-                    type = 'install'
-                    if options.update:
-                        type = 'update'
-                    self.cprint('Unable to %s. Try running again with sudo.' % (type), attr=RED)
-                return
 
             # ensure that the ~/.sprintly/ folder exists, we have credentials, etc
             self.initialize()
 
-            # run the requested option (note: install/update are handled above)
+            # run the requested option
             if options.installHook:
                 self.installHook()
             elif options.uninstallHook:
                 self.uninstallHook()
-            elif options.updateConfig:
-                self.updateConfig()
             else:
                 self.listSprintlyItems()
 
         except Exception as e:
             die('Fatal Error: %s', e)
-
-    def install(self, update):
-        """
-        Install this tool at SPRINTLY_PATH. If another file already
-        exists with the same name, user will be prompted to replace the file.
-        """
-
-        print 'Downloading latest version of sprintly from GitHub...'
-
-        # get the file
-        try:
-            response = urllib2.urlopen(SPRINTLY_SOURCE_URL)
-            sprintly_file_contents = response.read()
-        except Exception:
-            raise SprintlyException('Unable to obtain commit-msg from %s' % SPRINTLY_SOURCE_URL)
-
-        # verify nothing exists at the target path
-        target = SPRINTLY_PATH
-        if os.path.isfile(target):
-            overwrite = raw_input(self.render('${BRIGHT_YELLOW}A file already exists at %s.${RESET} Overwrite file? ' % target, trim=False))
-            while overwrite != 'y' and overwrite != 'n':
-                overwrite = raw_input('Please enter y/n: ')
-
-            if overwrite == 'n':
-                self.cprint('Unable to install. Please install manually.', attr=RED)
-                return
-
-            # remove existing file
-            print 'Deleting %s...' % target
-            try:
-                os.unlink(target)
-            except Exception:
-                raise SprintlyException('Unable to remove %s' % target)
-
-        # copy file to target
-        try:
-            if not os.path.isdir(SPRINTLY_DIR):
-                os.makedirs(SPRINTLY_DIR)
-            target_file = open(target, 'w')
-            target_file.write(sprintly_file_contents)
-            target_file.close()
-        except Exception:
-            raise SprintlyException('Unable to save file to %s' % target)
-
-        # ensure it is executable
-        try:
-            subprocess.call(['chmod', '+x', target])
-        except Exception:
-            raise SprintlyException('Unable to make %s executable.' % target)
-
-        # done!
-        self.cprint('Successfully installed sprintly to %s' % target, attr=GREEN)
-
-        # except update the hook too
-        self.updateHook()
-
-        # if this is not an update, install
-        if not update:
-            print ''
-            self.cprint('That\'s all! Type \'sprintly\' and hit enter to get started.', attr=BRIGHT_MAGENTA)
-            print ''
 
     def initialize(self):
         """
@@ -269,22 +187,10 @@ the message and does not support multiple item numbers.
         # load config values
         self.loadFromConfig()
 
-    def createSprintlyConfig(self, update=False):
+    def createSprintlyConfig(self):
         """
         Create the Sprint.ly config. Prompt user for all necessary values.
-
-        When 'update' is set to True and an existing value is present for
-        a given configuration item, allow user to keep old value.
-
-        Note: if update is True, this must be called after initialize. Failure
-        to do so wil result in a new config being created, as the values in
-        self._config will not yet be set.
         """
-
-        if not update:
-            print 'Creating config...'
-        else:
-            print 'Updating config... Press enter to accept default value shown in brackets.'
 
         # set version
         self._config['version'] = CONFIG_VERSION
@@ -300,7 +206,7 @@ the message and does not support multiple item numbers.
         # prompt for user
         name = 'user'
         message = 'Enter Sprint.ly username (email)'
-        if update and name in self._config:
+        if name in self._config:
             self._config[name] = getConfigItem(message, self._config[name])
         else:
             self._config[name] = getConfigItem(message)
@@ -308,7 +214,7 @@ the message and does not support multiple item numbers.
         # prompt for key
         name = 'key'
         message = 'Enter Sprint.ly API Key'
-        if update and name in self._config:
+        if name in self._config:
             self._config[name] = getConfigItem(message, self._config[name])
         else:
             self._config[name] = getConfigItem(message)
@@ -345,7 +251,7 @@ the message and does not support multiple item numbers.
             defaultProductId = '0'
             while defaultProductId not in productMap.keys():
                 message = 'Enter default Sprint.ly product id (%s)' % productList
-                if update and 'product' in self._config:
+                if 'product' in self._config:
                     defaultProductId = getConfigItem(message, str(self._config['product']['id']))
                 else:
                     defaultProductId = getConfigItem(message)
@@ -358,10 +264,7 @@ the message and does not support multiple item numbers.
             config_file = open(self._sprintlyConfigPath, 'w')
             config_file.write(serialized_config)
             config_file.close()
-            if not update:
-                self.cprint('Configuration successfully created.', attr=GREEN)
-            else:
-                self.cprint('Configuration successfully updated.', attr=GREEN)
+            self.cprint('Configuration successfully created.', attr=GREEN)
         except:
             raise SprintlyException('Unable to write configuration to disk at %s' % self._sprintlyConfigPath)
 
@@ -382,14 +285,7 @@ the message and does not support multiple item numbers.
         # validate version
         if 'version' not in self._config or self._config['version'] != CONFIG_VERSION:
             self.cprint('Your configuration needs to be updated. You will now be prompted to update it.', attr=YELLOW)
-            self.updateConfig()
-
-    def updateConfig(self):
-        """
-        Prompt user to update configuration settings.
-        Defaults will be original config values if present.
-        """
-        self.createSprintlyConfig(True)
+            self.createSprintlyConfig()
 
     def listSprintlyItems(self):
         """
@@ -616,10 +512,6 @@ the message and does not support multiple item numbers.
         if not os.path.isdir(hooks_directory):
             raise SprintlyException('This command can only be run from the root of a git repository.')
 
-        # ensure hook is installed
-        if not os.path.isfile(HOOK_PATH):
-            raise SprintlyException('Please run \'sprintly --update\' first to install the hook.')
-
         # create a symlink to the commit-msg file
         destination = os.path.join(hooks_directory, HOOK_NAME)
 
@@ -683,45 +575,6 @@ the message and does not support multiple item numbers.
             raise SprintlyException('File already exists at %s. Please delete it before proceeding.' % destination)
 
         print 'Hook has been uninstalled.'
-
-    def updateHook(self):
-        """
-        Download the commit-msg hook to ~/.sprintly/commit-msg.
-        Replace existing file if present. Make executable.
-        Returns the path of the file.
-        """
-
-        print 'Downloading latest version of commit-msg hook from GitHub...'
-
-        # get the file
-        try:
-            response = urllib2.urlopen(COMMIT_MSG_SOURCE_URL)
-            commit_msg_file_contents = response.read()
-        except Exception:
-            raise SprintlyException('Unable to obtain commit-msg from %s' % COMMIT_MSG_SOURCE_URL)
-
-        # ensure directory exists
-        try:
-            if not os.path.exists(HOOK_DIR):
-                os.makedirs(HOOK_DIR, 0777)
-        except Exception:
-            raise SprintlyException('Unable to create directory %s' % HOOK_DIR)
-
-        # save the file
-        try:
-            commit_msg_file = open(HOOK_PATH, 'w')
-            commit_msg_file.write(commit_msg_file_contents)
-            commit_msg_file.close()
-        except Exception:
-            raise SprintlyException('Unable to save file to %s' % HOOK_PATH)
-
-        # make sure user can read, write, and execute
-        try:
-            os.chmod(HOOK_PATH, 0777)
-        except Exception:
-            raise SprintlyException('Unable to make %s executable.' % HOOK_PATH)
-
-        self.cprint('Hook was updated at %s' % HOOK_PATH, attr=GREEN)
 
     def cprint(self, str, attr=None, trim=True):
         self._term.write(self.render(str, attr, trim) + '\r\n')
