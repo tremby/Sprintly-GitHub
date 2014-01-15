@@ -147,6 +147,8 @@ the message and does not support multiple item numbers.
             else:
                 self.listSprintlyItems()
 
+        except KeyboardInterrupt:
+            die()
         except Exception as e:
             die('Fatal Error: %s', e)
 
