@@ -11,6 +11,7 @@ setup(
         data_files=[('', ['commit-msg'])],
         scripts=['sprintly'],
         license='MIT',
+        install_requires=['dulwich>=0.9.4'],
         )
 
 # vim: et ts=4 sts=4 sw=4 tw=78 fo-=w

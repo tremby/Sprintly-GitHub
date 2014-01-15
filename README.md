@@ -5,20 +5,24 @@ Sprintly-GitHub
 items; [GitHub](http://github.com 'GitHub') is a great tool for managing your 
 code. The tools in this repository will help you take advantage of the 
 integration with GitHub that Sprint.ly offers without drawing your attention 
-away from the terminal. Use the `sprintly` command line tool to get a list of 
-all items assigned to you. Install the `commit-msg` hook to facilitate 
-Sprint.ly's GitHub integration.
+away from the terminal.
+
+Each git repository can be associated with a Sprint.ly product. Use the 
+`sprintly` command line tool to get a list of all items assigned to you for the 
+current product, or `sprintly --all` to get all items in all projects.
+
+Install the `commit-msg` hook to facilitate Sprint.ly's GitHub integration.
 
 How to use `sprintly`
 ---------------------
 
-	Usage: sprintly [options]
+See `sprintly --help` for basic usage instructions.
 
-	By default, your sprintly items will be shown.
+	Usage: sprintly [options]
 
 	Options:
 	  -h, --help		show this help message and exit
-	  -h, --help		show this help message and exit
+	  -a, --all			show items for all products
 	  --install-hook	install commit-msg hook in current directory (must be a
 						git repository)
 	  --uninstall-hook	uninstall commit-msg hook in current directory (must be a
@@ -33,13 +37,34 @@ Clone this repository, then run the setup script.
 	cd Sprintly-GitHub
 	sudo python setup.py install
 
+Configuring `sprintly`
+----------------------
 
+The git configuration keys `sprintly.user` and `sprintly.key` are expected to 
+exist, with the Sprint.ly email address and API key respectively. They can be 
+set in the repository-specific or global Git config file by hand or with the 
+`git-config` tool. For example:
 
+	$ git config sprintly.user user@example.com
+	$ git config sprintly.key abc123abc123
 
+or, globally,
 
+	$ git config --global sprintly.user user@example.com
+	$ git config --global sprintly.key abc123abc123
 
+Once these are set, running `sprintly` from anywhere but a Git repository will 
+give a list of all items for this user.
 
+Running `sprintly` in a directory which is part of a Git repository requires a 
+further configuration key, `sprintly.product` to exist. This could be set 
+globally but you'll likely want it set for each separate repository. If it is 
+not set, the script will fetch products from the Sprint.ly API and offer a 
+choice, then save this in the Git repository configuration for you.
 
+*Note: (1) your Sprint.ly API Key can be found 
+[here](https://sprint.ly/account/profile/). (2) you will only be asked to enter 
+a sprint.ly product id if you have more than one product.*
 
 GitHub Integration: Installing the `commit-msg` hook
 ----------------------------------------------------
@@ -53,8 +78,8 @@ The `sprintly` tool can install the hook for you. Navigate to a git repository a
 **Important: you MUST install this manually in every git repository. This is a 
 limitation of the way git implements hooks. Don't blame me!**
 
-Tip: make sure that your git user.email matches your Sprint.ly username, or the 
-hook won't work. If this happens, you will see the following message:
+Tip: make sure that your git `user.email` matches your Sprint.ly username, or 
+the hook won't work. If this happens, you will see the following message:
 
 	$ sprintly --install-hook
 	Creating symlink...
@@ -65,9 +90,9 @@ hook won't work. If this happens, you will see the following message:
 		'git config user.email user@company.com' (this repo only)
 
 *Note: the hook installed is actually a symbolic link to a shared copy of the 
-hook found at /usr/local/share/sprintly/commit-msg. By doing this, the hook can 
-be easily updated for all users and all repositories by calling `sprintly 
---update`.*
+hook found wherever Python setuptools decided to put it. By doing this, the hook 
+can be easily updated for all users and all repositories by installing a new 
+version of Sprintly-GitHub.*
 
 ###Uninstalling the `commit-msg` hook
 
@@ -77,6 +102,14 @@ repository in question and run:
 	$ sprintly --uninstall-hook
 	Hook has been uninstalled.
 
+Changing the Configuration
+--------------------------
+
+If at some point you wish to change your configuration (you get a new username 
+or API key) just use `git-config` again to update whatever is necessary or edit 
+the configuration files by hand. To choose the Sprint.ly product from the list 
+again you can just remove the `sprintly.product` key with `git config --unset 
+sprintly.product`. See `man git-config` for full details.
 
 Sample Output
 -------------

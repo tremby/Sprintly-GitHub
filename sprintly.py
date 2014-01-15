@@ -25,7 +25,6 @@ logging.basicConfig()
 logger = logging.getLogger(__name__)
 
 # constants
-CONFIG_VERSION = '2.1'
 HOOK_NAME = 'commit-msg'
 HOOK_DIR = os.path.dirname(__file__)
 
@@ -93,10 +92,10 @@ class SprintlyTool:
             except:
                 pass
 
-        self._config = {}
+        self._cache = None
         self._sprintlyDirectoryPath = None
-        self._sprintlyConfigPath = None
         self._sprintlyCachePath = None
+        self._repo = None
 
     def run(self, scr=None):
         """
@@ -108,7 +107,8 @@ class SprintlyTool:
             usage = '''\
 %prog [options]
 
-By default, your Sprint.ly items will be shown.
+By default, your Sprint.ly items for the product associated with the current
+Git repository are shown (or all items if not in a repository).
 
 When using the commit-msg hook, you will be prompted for a Sprint.ly item
 number unless you include a Sprint.ly keyword/item number in your commit
@@ -131,13 +131,18 @@ asked to provide an item number. This shortcut only works at the beginning of
 the message and does not support multiple item numbers.
 '''
             parser = OptionParser(usage=usage)
-            parser.add_option('--install-hook', dest='installHook', help='install commit-msg hook in current directory (must be a git repository)', action='store_true', default=False)
-            parser.add_option('--uninstall-hook', dest='uninstallHook', help='uninstall commit-msg hook in current directory (must be a git repository)', action='store_true', default=False)
+            parser.add_option('--all', '-a', dest='allProducts', help='show items for all products', action='store_true', default=False)
+            parser.add_option('--install-hook', dest='installHook', help='install commit-msg hook in current git repository', action='store_true', default=False)
+            parser.add_option('--uninstall-hook', dest='uninstallHook', help='uninstall commit-msg hook in current git repository', action='store_true', default=False)
 
             (options, _) = parser.parse_args()
 
             # ensure that the ~/.sprintly/ folder exists, we have credentials, etc
             self.initialize()
+
+            # If we have no git repository set the "all products" option
+            if self._repo is None:
+                options.allProducts = True
 
             # run the requested option
             if options.installHook:
@@ -145,7 +150,10 @@ the message and does not support multiple item numbers.
             elif options.uninstallHook:
                 self.uninstallHook()
             else:
-                self.listSprintlyItems()
+                self.listSprintlyItems(options)
+
+            # Write the cache
+            self.writeCache()
 
         except KeyboardInterrupt:
             die()
@@ -154,10 +162,10 @@ the message and does not support multiple item numbers.
 
     def initialize(self):
         """
-        Ultimate goal is to get the user and key from the config file.
-        If the config file cannot be found, a config file will be
-        created via prompts displayed to the user. A cache file will
-        also be created during this step.
+        Ultimate goal is to find the current git repository if any and ensure
+        user and key have been configured.
+        A cache file will also be created during this step if it doesn't
+        already exist.
         """
 
         # get the users home directory
@@ -165,37 +173,53 @@ the message and does not support multiple item numbers.
         if home == '~':
             raise SprintlyException('Unable to expand home directory.')
 
-        # set the sprintly directory path (create if it doesn't exist)
+        # set the sprintly directory path
         self._sprintlyDirectoryPath = os.path.join(home, '.sprintly')
-        if not os.path.isdir(self._sprintlyDirectoryPath):
-            os.mkdir(self._sprintlyDirectoryPath, 0700)
-            if not os.path.isdir(self._sprintlyDirectoryPath):
-                raise SprintlyException('Unable to create folder at %s' % self._sprintlyDirectoryPath)
 
-        # set the sprintly config path (create if it doesn't exist)
-        self._sprintlyConfigPath = os.path.join(self._sprintlyDirectoryPath, 'sprintly.config')
-        if not os.path.isfile(self._sprintlyConfigPath):
-            self.createSprintlyConfig()
-
-        # set the sprintly cache path (create if it doesn't exist)
+        # set the sprintly cache path
         self._sprintlyCachePath = os.path.join(self._sprintlyDirectoryPath, 'sprintly.cache')
-        if not os.path.isfile(self._sprintlyCachePath):
-            try:
-                # "touch" cache file
-                open(self._sprintlyCachePath, 'w').close()
-            except Exception:
-                raise SprintlyException('Unable to create file at %s' % self._sprintlyCachePath)
 
-        # load config values
-        self.loadFromConfig()
+        # Find the root of this git repository
+        root = '.'
+        prev = None
+        # Ascend until real path of the previously tried path is the same as
+        # the real path of the current path (in which case we have hit root)
+        while prev is None or os.path.realpath(root) is not os.path.realpath(prev):
+            if os.path.isdir(os.path.join(root, '.git')):
+                # Initialize a dulwich git repository object
+                self._repo = dulwich.repo.Repo(root)
+                break
+            prev = root
+            root = os.path.join(root, '..')
+
+        # Check that Sprintly email address and API key are set
+        unset = []
+        try:
+            self.getConfigValue('user')
+        except KeyError:
+            unset.append('user')
+        try:
+            self.getConfigValue('key')
+        except KeyError:
+            unset.append('key')
+        if len(unset):
+            self.cprint('%s %s not been configured.' % (' and '.join('sprintly.%s' % key for key in unset), 'has' if len(unset) is 1 else 'have'), attr=RED)
+            self.cprint('To configure sprintly run')
+            if 'user' in unset:
+                self.cprint('  git config sprintly.user <Sprint.ly email address>')
+            if 'key' in unset:
+                self.cprint('  git config sprintly.key <Sprint.ly API key>')
+            self.cprint('Use the --global flag to write to your user configuration rather than the repository-specific configuration.')
+            self.cprint('  git config --global sprintly...')
+            die()
 
     def createSprintlyConfig(self):
         """
         Create the Sprint.ly config. Prompt user for all necessary values.
         """
 
-        # set version
-        self._config['version'] = CONFIG_VERSION
+        # Get git configuration
+        config = self._repo.get_config()
 
         # used to simplify prompting user with optional default
         def getConfigItem(message, default=None):
@@ -205,99 +229,97 @@ the message and does not support multiple item numbers.
                 item = raw_input('%s: ' % message)
             return item
 
-        # prompt for user
-        name = 'user'
-        message = 'Enter Sprint.ly username (email)'
-        if name in self._config:
-            self._config[name] = getConfigItem(message, self._config[name])
-        else:
-            self._config[name] = getConfigItem(message)
+        # Try and use API with current credentials to determine validity
+        self.getUserId()
 
-        # prompt for key
-        name = 'key'
-        message = 'Enter Sprint.ly API Key'
-        if name in self._config:
-            self._config[name] = getConfigItem(message, self._config[name])
-        else:
-            self._config[name] = getConfigItem(message)
+        # Get the list of products
+        self.populateProductsCache()
 
-        # try and use API with these values to determine validity
-        response = self.sprintlyAPICall('user/whoami.json')
-        if not response or 'code' in response:
-            raise SprintlyException('Invalid credentials. Unable to authenticate with Sprint.ly.')
-        if response['email'] != self._config['user']:
-            raise SprintlyException('Invalid credentials. Please ensure you are using your own API Key.')
-
-        # add user id to config
-        self._config['id'] = response['id']
-
-        # get a list of products and prompt user for default product if more than 1
-        products = self.sprintlyAPICall('products.json')
-        if not products:
-            raise SprintlyException('Unable to get product list.')
+        # Prompt user for default product if more than 1
         productMap = {}
 
-        for product in products:
+        for product in self.getCache()['products'].values():
             productId = str(product['id'])
             productMap[productId] = product
 
         productCount = len(productMap)
 
+        productId = None
         if productCount == 0:
             raise SprintlyException('It appears that you have no products associated with your Sprint.ly account. Add at least one and then try again.')
         elif productCount == 1:
-            self._config['product'] = productMap.values()[0]
+            productId = productMap.values()[0]
         else:
             # prompt user for a product until they enter one found in the map
             productList = ', '.join(['%d - %s' % (p['id'], p['name']) for p in productMap.values()])
-            defaultProductId = '0'
-            while defaultProductId not in productMap.keys():
-                message = 'Enter default Sprint.ly product id (%s)' % productList
-                if 'product' in self._config:
-                    defaultProductId = getConfigItem(message, str(self._config['product']['id']))
-                else:
-                    defaultProductId = getConfigItem(message)
-            self._config['product'] = productMap[defaultProductId]
+            while productId not in productMap.keys():
+                message = 'Enter Sprint.ly product id (%s)' % productList
+                try:
+                    productId = getConfigItem(message, str(self.getConfigValue('product')))
+                except KeyError:
+                    productId = getConfigItem(message)
+        config.set('sprintly', 'product', productId)
 
         # write config file if all is good
-        serialized_config = json.dumps(self._config)
+        config.write_to_path()
+
+    def getConfigValue(self, key):
+        """
+        Get a value from the sprintly section of the git configuration
+        """
+        try:
+            # Get the config of this git repository
+            config = self._repo.get_config_stack()
+        except AttributeError:
+            # Get the global git config
+            config = dulwich.config.StackedConfig(dulwich.config.StackedConfig.default_backends())
+        return config.get('sprintly', key)
+
+    def getUserId(self):
+        """
+        Get the user's ID either from the cache or from the API
+        """
+
+        cache = self.getCache()
 
         try:
-            config_file = open(self._sprintlyConfigPath, 'w')
-            config_file.write(serialized_config)
-            config_file.close()
-            self.cprint('Configuration successfully created.', attr=GREEN)
-        except:
-            raise SprintlyException('Unable to write configuration to disk at %s' % self._sprintlyConfigPath)
+            return cache['userId'][self.getConfigValue('user')]
+        except KeyError:
+            pass
 
-    def loadFromConfig(self):
-        """
-        Load user and key from the config file. Validate here that the version
-        of this config is readable by this version of the tool.
-        """
+        response = self.sprintlyAPICall('user/whoami.json')
+        if not response or 'code' in response:
+            raise SprintlyException('Invalid credentials. Unable to authenticate with Sprint.ly.')
+        if response['email'] != self.getConfigValue('user'):
+            raise SprintlyException('Invalid credentials. Please ensure you are using your own API Key.')
 
-        try:
-            config_file = open(self._sprintlyConfigPath, 'r')
-            serialized_config = config_file.readline()
-            config_file.close()
-            self._config = json.loads(serialized_config)
-        except:
-            raise SprintlyException('Unable to read credentials from disk at %s' % self._sprintlyConfigPath)
+        # Associate email with user ID and store in cache
+        if 'userId' not in cache:
+            cache['userId'] = {}
+        cache['userId'][self.getConfigValue('user')] = response['id']
 
-        # validate version
-        if 'version' not in self._config or self._config['version'] != CONFIG_VERSION:
-            self.cprint('Your configuration needs to be updated. You will now be prompted to update it.', attr=YELLOW)
-            self.createSprintlyConfig()
+        return response['id']
 
-    def listSprintlyItems(self):
+    def listSprintlyItems(self, options):
         """
         Lists all items for the current user from the Sprint.ly API.
         """
 
         # populate the cache from the API if possible (may not be possible,
         # e.g. in the case of offline access)
-        self.populateCache()
-        products = self.readCache()
+        self.populateProductsCache()
+
+        products = self.getCache()['products']
+        if options.allProducts:
+            # Dict to list
+            products = products.values()
+        else:
+            try:
+                products = [products[self.getConfigValue('product')]]
+            except KeyError:
+                self.cprint('This git repository is not yet associated with a Sprint.ly product. You will now be prompted to choose one.', attr=YELLOW)
+                return self.createSprintlyConfig()
+
         self.printList(products)
 
     def printList(self, products):
@@ -359,127 +381,146 @@ the message and does not support multiple item numbers.
         if itemCount == 0:
             self.cprint('No assigned items', attr=GREEN)
 
-    def populateCache(self):
+    def populateProductsCache(self):
         """
         Populate the cache from the Sprint.ly API if possible.
         """
 
-        try:
-            cache = {}
+        cache = self.getCache()
 
-            cache['updated_at'] = time()
-            cache['products'] = []
+        cache['products'] = {}
 
-            products = []
+        # get products from the API
+        products = self.sprintlyAPICall('products.json')
+        if not products:
+            raise SprintlyException('Unable to get product list.')
 
-            # use product from config file
-            products.append(self._config['product'])
+        # iterate over products
+        for product in products:
 
-            # get products from the API
-            # products = self.sprintlyAPICall('products.json')
-            # if not products:
-            #   raise SprintlyException('Unable to get product list.')
+            productName = product['name']
+            productId = str(product['id'])
+            productNameWithUrl = '\'' + productName + '\' (https://sprint.ly/product/' + productId + '/)'
 
-            # iterate over products
-            for product in products:
+            # get all items assigned to current user
+            items = []
+            offset = 0
+            limit = 100
+            while True:
+                itemsPartial = self.sprintlyAPICall('products/' + productId + '/items.json?assigned_to=' + str(self.getUserId()) + '&children=1&limit=' + str(limit) + '&offset=' + str(offset))
 
-                productName = product['name']
-                productId = str(product['id'])
-                productNameWithUrl = '\'' + productName + '\' (https://sprint.ly/product/' + productId + '/)'
+                # if we get nothing, an empty list, an error, quit
+                if not itemsPartial or len(itemsPartial) == 0 or 'code' in items:
+                    break
+                # otherwise, add on these items and increase the offset
+                else:
+                    items = items + itemsPartial
+                    offset = offset + limit
 
-                # get all items assigned to current user
-                items = []
-                offset = 0
-                limit = 100
-                while True:
-                    itemsPartial = self.sprintlyAPICall('products/' + productId + '/items.json?assigned_to=' + str(self._config['id']) + '&children=1&limit=' + str(limit) + '&offset=' + str(offset))
+                # if we got less than a full response, no need to check again
+                if len(itemsPartial) < limit:
+                    break
 
-                    # if we get nothing, an empty list, an error, quit
-                    if not itemsPartial or len(itemsPartial) == 0 or 'code' in items:
-                        break
-                    # otherwise, add on these items and increase the offset
+            # if anything went wrong, print an error message
+            if 'code' in items:
+                # include message if applicable
+                message = ''
+                if 'message' in items:
+                    message = ': %s' % items['message']
+                self.cprint('Warning: unable to get items for %s%s' % (productNameWithUrl, message), attr=YELLOW)
+                continue
+            # a 'parent' is any item without a parent key
+            # a 'child' is any item with a parent key
+            # sort so that all parents appear first and all children appear after ordered by their number
+            items.sort(key=lambda item: item['number'] if 'parent' in item else sys.maxint, reverse=True)
+
+            # turn flat list into tree
+            itemsTree = []
+            parentMapping = {} # allow parents to be looked up by number
+
+            for item in items:
+                number = str(item['number'])
+
+                # if item is not a child
+                if 'parent' not in item:
+                    itemsTree.append(item)
+                    parentMapping[number] = item
+
+                # if item is a child...
+                else:
+                    parent = item['parent']  # get reference to parent
+                    del item['parent']  # remove parent from child
+                    parentNumber = str(parent['number'])
+
+                    # if we have the parent, nest under parent
+                    if parentNumber in parentMapping:
+
+                        # we sorted items above to ensure all parents will be in map before any child is encountered
+                        parent = parentMapping[parentNumber]
+                        if 'children' not in parent:
+                            parent['children'] = []
+                        parent['children'].append(item)
+
+                    # if we don't have the parent, add placeholder parent to preserve tree structure
                     else:
-                        items = items + itemsPartial
-                        offset = offset + limit
+                        parent['children'] = [item]
+                        parentMapping[parentNumber] = parent
+                        itemsTree.append(parent)
 
-                    # if we got less than a full response, no need to check again
-                    if len(itemsPartial) < limit:
-                        break
+            # sort items by (status, then first child, if it exists, else number)
+            itemsTree.sort(key=lambda item: item['children'][0]['number'] if 'children' in item else item['number'], reverse=True)
+            product['items'] = itemsTree
+            cache['products'][productId] = product
 
-                # if anything went wrong, print an error message
-                if 'code' in items:
-                    # include message if applicable
-                    message = ''
-                    if 'message' in items:
-                        message = ': %s' % items['message']
-                    self.cprint('Warning: unable to get items for %s%s' % (productNameWithUrl, message), attr=YELLOW)
-                    continue
-                # a 'parent' is any item without a parent key
-                # a 'child' is any item with a parent key
-                # sort so that all parents appear first and all children appear after ordered by their number
-                items.sort(key=lambda item: item['number'] if 'parent' in item else sys.maxint, reverse=True)
-
-                # turn flat list into tree
-                itemsTree = []
-                parentMapping = {} # allow parents to be looked up by number
-
-                for item in items:
-                    number = str(item['number'])
-
-                    # if item is not a child
-                    if 'parent' not in item:
-                        itemsTree.append(item)
-                        parentMapping[number] = item
-
-                    # if item is a child...
-                    else:
-                        parent = item['parent']  # get reference to parent
-                        del item['parent']  # remove parent from child
-                        parentNumber = str(parent['number'])
-
-                        # if we have the parent, nest under parent
-                        if parentNumber in parentMapping:
-
-                            # we sorted items above to ensure all parents will be in map before any child is encountered
-                            parent = parentMapping[parentNumber]
-                            if 'children' not in parent:
-                                parent['children'] = []
-                            parent['children'].append(item)
-
-                        # if we don't have the parent, add placeholder parent to preserve tree structure
-                        else:
-                            parent['children'] = [item]
-                            parentMapping[parentNumber] = parent
-                            itemsTree.append(parent)
-
-                # sort items by (status, then first child, if it exists, else number)
-                itemsTree.sort(key=lambda item: item['children'][0]['number'] if 'children' in item else item['number'], reverse=True)
-                product['items'] = itemsTree
-                cache['products'].append(product)
-
-            serialized_cache = json.dumps(cache)
-
-            cache_file = open(self._sprintlyCachePath, 'w')
-            cache_file.write(serialized_cache)
-            cache_file.close()
-        except Exception:
-            self.cprint('Unable to populate cache. List may not be up to date.', attr=RED)
-
-    def readCache(self):
+    def writeCache(self):
         """
-        Read from the cache and return a list of Sprint.ly items.
+        Write the current cache object to disk
         """
 
-        cache_file = open(self._sprintlyCachePath, 'r')
-        serialized_cache = cache_file.readline()
+        cache = self.getCache()
+        cache['updated_at'] = time()
+        serialized_cache = json.dumps(cache)
+
+        cache_file = open(self._sprintlyCachePath, 'w')
+        cache_file.write(serialized_cache)
         cache_file.close()
 
-        try:
-            cache = json.loads(serialized_cache)
-        except Exception:
-            raise SprintlyException('Cache is empty or invalid. Please try running the tool again.')
+    def _readCache(self):
+        """
+        Read from the cache from disk and return it
+        """
 
-        return cache['products']
+        try:
+            os.mkdir(self._sprintlyDirectoryPath, 0700)
+        except OSError:
+            # Already exists
+            pass
+        except IOError:
+            raise SprintlyException('Unable to create folder at %s' % self._sprintlyDirectoryPath)
+
+        try:
+            cache_file = open(self._sprintlyCachePath, 'r')
+            serialized_cache = cache_file.readline()
+            cache_file.close()
+            try:
+                cache = json.loads(serialized_cache)
+            except ValueError:
+                # Bad JSON; ignore and replace
+                cache = {}
+        except IOError:
+            # File doesn't exist yet
+            cache = {}
+
+        return cache
+
+    def getCache(self):
+        """
+        Get the cache from memory or from file
+        """
+
+        if self._cache is None:
+            self._cache = self._readCache()
+        return self._cache
 
     def sprintlyAPICall(self, url):
         """
@@ -490,7 +531,7 @@ the message and does not support multiple item numbers.
         url = 'https://sprint.ly/api/%s' % url
 
         try:
-            userData = 'Basic ' + (self._config['user'] + ':' + self._config['key']).encode('base64').replace("\n",'')
+            userData = 'Basic ' + (self.getConfigValue('user') + ':' + self.getConfigValue('key')).encode('base64').replace("\n",'')
             req = urllib2.Request(url)
             req.add_header('Accept', 'application/json')
             req.add_header('Authorization', userData)
@@ -541,11 +582,11 @@ the message and does not support multiple item numbers.
         try:
             process = subprocess.Popen(['git', 'config', 'user.email'], stdout=subprocess.PIPE)
             gitEmail = process.stdout.read().strip()
-            if gitEmail != self._config['user']:
-                self.cprint('WARNING: Your git email (' + gitEmail + ') does not match your Sprint.ly username (' + self._config['user'] + ')', attr=YELLOW)
+            if gitEmail != self.getConfigValue('user'):
+                self.cprint('WARNING: Your git email (' + gitEmail + ') does not match your Sprint.ly username (' + self.getConfigValue('user') + ')', attr=YELLOW)
                 self.cprint('WARNING: Don\'t worry - there is an easy fix. Simply run one of the following:', attr=YELLOW)
-                self.cprint('\t\'git config --global user.email ' + self._config['user'] + '\' (all repos)')
-                self.cprint('\t\'git config user.email ' + self._config['user'] + '\' (this repo only)')
+                self.cprint('\t\'git config --global user.email ' + self.getConfigValue('user') + '\' (all repos)')
+                self.cprint('\t\'git config user.email ' + self.getConfigValue('user') + '\' (this repo only)')
         except Exception:
             self.cprint('Unable to verify that \'git config user.email\' matches your Sprint.ly account email.', attr=RED)
 
