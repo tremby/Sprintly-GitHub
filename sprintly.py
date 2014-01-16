@@ -97,14 +97,12 @@ class SprintlyTool:
         self._sprintlyCachePath = None
         self._repo = None
 
-    def run(self, scr=None):
+    def getOptions(self, source=None):
         """
-        Application flow.
+        Get options from the command line or other source
         """
 
-        try:
-            usage = textwrap.dedent('''\
-            usage = '''\
+        usage = '''\
 %prog [options]
 
 By default, your Sprint.ly items for the product associated with the current
@@ -130,13 +128,21 @@ The hook will automatically prepend the keyword 'references' and you won't be
 asked to provide an item number. This shortcut only works at the beginning of
 the message and does not support multiple item numbers.
 '''
-            parser = OptionParser(usage=usage)
-            parser.add_option('--all', '-a', dest='allProducts', help='show items for all products', action='store_true', default=False)
-            parser.add_option('--install-hook', dest='installHook', help='install commit-msg hook in current git repository', action='store_true', default=False)
-            parser.add_option('--uninstall-hook', dest='uninstallHook', help='uninstall commit-msg hook in current git repository', action='store_true', default=False)
+        parser = OptionParser(usage=usage)
+        parser.add_option('--all', '-a', dest='allProducts', help='show items for all products', action='store_true', default=False)
+        parser.add_option('--install-hook', dest='installHook', help='install commit-msg hook in current git repository', action='store_true', default=False)
+        parser.add_option('--uninstall-hook', dest='uninstallHook', help='uninstall commit-msg hook in current git repository', action='store_true', default=False)
 
-            (options, _) = parser.parse_args()
+        (options, _) = parser.parse_args(source)
 
+        return options
+
+    def run(self, options):
+        """
+        Application flow.
+        """
+
+        try:
             # ensure that the ~/.sprintly/ folder exists, we have credentials, etc
             self.initialize()
 
