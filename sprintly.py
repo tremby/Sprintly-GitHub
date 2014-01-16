@@ -15,7 +15,7 @@ import dulwich.repo
 import dulwich.config
 from curses import setupterm, tigetstr, tigetnum, tparm
 from time import time
-from optparse import OptionParser
+import argparse
 
 # force utf-8 encoding
 reload(sys)
@@ -102,9 +102,7 @@ class SprintlyTool:
         Get options from the command line or other source
         """
 
-        usage = '''\
-%prog [options]
-
+        description = '''\
 By default, your Sprint.ly items for the product associated with the current
 Git repository are shown (or all items if not in a repository).
 
@@ -128,14 +126,12 @@ The hook will automatically prepend the keyword 'references' and you won't be
 asked to provide an item number. This shortcut only works at the beginning of
 the message and does not support multiple item numbers.
 '''
-        parser = OptionParser(usage=usage)
-        parser.add_option('--all', '-a', dest='allProducts', help='show items for all products', action='store_true', default=False)
-        parser.add_option('--install-hook', dest='installHook', help='install commit-msg hook in current git repository', action='store_true', default=False)
-        parser.add_option('--uninstall-hook', dest='uninstallHook', help='uninstall commit-msg hook in current git repository', action='store_true', default=False)
+        parser = argparse.ArgumentParser(description=description, formatter_class=argparse.RawDescriptionHelpFormatter)
+        parser.add_argument('--all', '-a', dest='allProducts', help='show items for all products', action='store_true', default=False)
+        parser.add_argument('--install-hook', dest='installHook', help='install commit-msg hook in current git repository', action='store_true', default=False)
+        parser.add_argument('--uninstall-hook', dest='uninstallHook', help='uninstall commit-msg hook in current git repository', action='store_true', default=False)
 
-        (options, _) = parser.parse_args(source)
-
-        return options
+        return parser.parse_args(source)
 
     def run(self, options):
         """

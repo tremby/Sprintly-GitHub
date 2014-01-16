@@ -18,15 +18,13 @@ How to use `sprintly`
 
 See `sprintly --help` for basic usage instructions.
 
-	Usage: sprintly [options]
+	usage: sprintly [-h] [--all] [--install-hook] [--uninstall-hook]
 
-	Options:
-	  -h, --help		show this help message and exit
-	  -a, --all			show items for all products
-	  --install-hook	install commit-msg hook in current directory (must be a
-						git repository)
-	  --uninstall-hook	uninstall commit-msg hook in current directory (must be a
-						git repository)
+	optional arguments:
+	  -h, --help        show this help message and exit
+	  --all, -a         show items for all products
+	  --install-hook    install commit-msg hook in current git repository
+	  --uninstall-hook  uninstall commit-msg hook in current git repository
 
 Installing `sprintly`
 ---------------------
