@@ -103,6 +103,10 @@ class SprintlyTool:
         """
 
         description = '''\
+Show Sprint.ly tasks assigned to you (for the current project if in a git
+repository) or install/uninstall the commit hook.
+'''
+        epilog = '''\
 By default, your Sprint.ly items for the product associated with the current
 Git repository are shown (or all items if not in a repository).
 
@@ -126,7 +130,7 @@ The hook will automatically prepend the keyword 'references' and you won't be
 asked to provide an item number. This shortcut only works at the beginning of
 the message and does not support multiple item numbers.
 '''
-        parser = argparse.ArgumentParser(description=description, formatter_class=argparse.RawDescriptionHelpFormatter)
+        parser = argparse.ArgumentParser(description=description, epilog=epilog, formatter_class=argparse.RawDescriptionHelpFormatter)
         parser.add_argument('--all', '-a', dest='allProducts', help='show items for all products', action='store_true', default=False)
         parser.add_argument('--install-hook', dest='installHook', help='install commit-msg hook in current git repository', action='store_true', default=False)
         parser.add_argument('--uninstall-hook', dest='uninstallHook', help='uninstall commit-msg hook in current git repository', action='store_true', default=False)
