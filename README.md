@@ -73,6 +73,9 @@ The `sprintly` tool can install the hook for you. Navigate to a git repository a
 	Creating symlink...
 	Hook was installed at <repository>/.git/hooks/commit-msg
 
+If a commit hook already existed, it is moved from `commit-msg` to 
+`commit-msg.original`, but is still run after the Sprintly hook.
+
 **Important: you MUST install this manually in every git repository. This is a 
 limitation of the way git implements hooks. Don't blame me!**
 
@@ -99,6 +102,10 @@ repository in question and run:
 
 	$ sprintly --uninstall-hook
 	Hook has been uninstalled.
+
+If `commit-msg.original` exists (for instance if you already had a commit 
+message hook before installing Sprintly-GitHub) it is moved back to 
+`commit-msg`.
 
 Changing the Configuration
 --------------------------

@@ -27,9 +27,11 @@ logger = logging.getLogger(__name__)
 # constants
 HOOK_NAME = 'commit-msg'
 HOOK_DIR = os.path.dirname(__file__)
+ORIGINAL_HOOK_SUFFIX = '.original'
 
 # non-editable constants
 HOOK_PATH = os.path.join(HOOK_DIR, HOOK_NAME)
+ORIGINAL_HOOK_NAME = HOOK_NAME + ORIGINAL_HOOK_SUFFIX
 
 # tty colors
 DEFAULT = '\x1b[39m'
@@ -217,7 +219,7 @@ the message and does not support multiple item numbers.
                 self.cprint('  git config sprintly.key <Sprint.ly API key>')
             self.cprint('Use the --global flag to write to your user configuration rather than the repository-specific configuration.')
             self.cprint('  git config --global sprintly...')
-            die()
+            raise SprintlyException()
 
     def createSprintlyConfig(self):
         """
@@ -552,27 +554,32 @@ the message and does not support multiple item numbers.
 
     def installHook(self):
         """
-        A symlink will be created between the <current directory>/.git/hooks/commit-msg
-        and ~/.sprintly/commit-msg
+        A symlink will be created from <git repo root>/.git/hooks/commit-msg
+        to the Sprintly commit message hook.
+        If a commit message hook already exists it will be moved.
         """
 
-        # ensure the current directory is a git repository
-        directory = os.getcwd()
-        hooks_directory = os.path.join(directory, '.git', 'hooks')
-        if not os.path.isdir(hooks_directory):
-            raise SprintlyException('This command can only be run from the root of a git repository.')
+        # Ensure we are in a git repository
+        if self._repo is None:
+            raise SprintlyException('This command can only be run from a git repository.')
+
+        hooks_directory = os.path.join(self._repo.controldir(), 'hooks')
 
         # create a symlink to the commit-msg file
         destination = os.path.join(hooks_directory, HOOK_NAME)
 
-        # if the destination is a file, move it; if it's a symlink, delete it
-        try:
-            if os.path.isfile(destination) and not os.path.islink(destination):
-                shutil.move(destination, destination + '.original')
-            elif os.path.islink(destination):
-                os.unlink(destination)
-        except Exception:
-            raise SprintlyException('File already exists at %s. Please delete it before proceeding.' % destination)
+        # If the destination is not our hook, move it
+        if os.path.exists(destination):
+            if os.path.realpath(destination) == os.path.realpath(HOOK_PATH):
+                self.cprint('Hook is already installed.', attr=GREEN)
+                return
+            originalDestination = os.path.join(hooks_directory, ORIGINAL_HOOK_NAME)
+            if os.path.exists(originalDestination):
+                print HOOK_PATH
+                self.cprint('A commit hook (not sprintly) already exists at %s, as does where we would normally move that file, %s. This must be resolved manually.' % (destination, originalDestination), attr=RED)
+                return
+            shutil.move(destination, originalDestination)
+            self.cprint('Existing hook moved to %s' % originalDestination, attr=YELLOW)
 
         self.cprint('Creating symlink...')
 
@@ -598,33 +605,40 @@ the message and does not support multiple item numbers.
 
     def uninstallHook(self):
         """
-        Remove the symlink we created. If the hook is not a symlink, don't remove it.
+        Remove the symlink we created, as long as it points to our hook. If an
+        old hook was previously moved by us, move it back.
         """
 
-        # ensure the current directory is a git repository
-        directory = os.getcwd()
-        hooks_directory = os.path.join(directory, '.git', 'hooks')
-        if not os.path.isdir(hooks_directory):
-            raise SprintlyException('This command can only be run from the root of a git repository.')
+        # Ensure we are in a git repository
+        if self._repo is None:
+            raise SprintlyException('This command can only be run from a git repository.')
+
+        hooks_directory = os.path.join(self._repo.controldir(), 'hooks')
 
         # get path to commit-msg file
         destination = os.path.join(hooks_directory, HOOK_NAME)
 
         # if the destination is a file, error; if it's a symlink, delete it
         try:
-            if os.path.isfile(destination) and not os.path.islink(destination):
-                raise SprintlyException('The commit-msg hook was not installed by this tool. Please remove it manually.')
-            elif os.path.islink(destination):
-                os.unlink(destination)
-            else:
-                self.cprint('Hook is already uninstalled.')
+            if not os.path.exists(destination):
+                self.cprint('There is no commit hook installed.', attr=YELLOW)
                 return
+            elif not os.path.isfile(destination):
+                raise SprintlyException('Commit hook is not a file.')
+            elif os.path.realpath(destination) != os.path.realpath(HOOK_PATH):
+                raise SprintlyException('The commit-msg hook was not installed by this tool. Please remove it manually.')
+            else:
+                os.unlink(destination)
         except SprintlyException as e:
             raise e
-        except Exception:
-            raise SprintlyException('File already exists at %s. Please delete it before proceeding.' % destination)
 
         self.cprint('Hook has been uninstalled.', attr=GREEN)
+
+        # If it exists, move the original hook back to commit-msg
+        originalDestination = os.path.join(hooks_directory, ORIGINAL_HOOK_NAME)
+        if os.path.exists(originalDestination):
+            shutil.move(originalDestination, destination)
+            self.cprint('Moved original commit hook back to %s' % destination, attr=YELLOW)
 
     def cprint(self, str, attr=None, trim=True):
         self._term.write(self.render(str, attr, trim) + '\r\n')
