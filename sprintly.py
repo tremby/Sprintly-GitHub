@@ -99,6 +99,9 @@ class SprintlyTool:
         self._sprintlyCachePath = None
         self._repo = None
 
+        # ensure that the ~/.sprintly/ folder exists, we have credentials, etc
+        self.initialize()
+
     def getOptions(self, source=None):
         """
         Get options from the command line or other source
@@ -145,9 +148,6 @@ the message and does not support multiple item numbers.
         """
 
         try:
-            # ensure that the ~/.sprintly/ folder exists, we have credentials, etc
-            self.initialize()
-
             # If we have no git repository set the "all products" option
             if self._repo is None:
                 options.allProducts = True
@@ -701,8 +701,12 @@ the message and does not support multiple item numbers.
         return seq[0:-1].strip(string.punctuation) + u'\u2026'
 
 
-class SprintlyCommitHook():
+class SprintlyCommitHook:
     def run(self):
+        """
+        Run the hook
+        """
+
         try:
             if len(sys.argv) > 1:
                 self.process(commit_msg_path=sys.argv[1])
