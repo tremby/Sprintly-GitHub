@@ -139,7 +139,10 @@ automatically remove the item number and run the message and item numbers
 through the template configured in the Git config at sprintly.template.
 '''
         parser = argparse.ArgumentParser(description=description, epilog=epilog, formatter_class=argparse.RawDescriptionHelpFormatter)
-        parser.add_argument('--all', '-a', dest='allProducts', help='show items for all products', action='store_true', default=False)
+        parser.add_argument('--all', dest='allProducts', help='show items for all products (default when not in a repository)', action='store_true', default=False)
+        parser.add_argument('--self', '-s', dest='assignee', help='show only items assigned to you (default)', action='store_const', const='self', default='self')
+        parser.add_argument('--anyone', '-a', dest='assignee', help='show items assigned to anyone (or unassigned)', action='store_const', const='anyone')
+        parser.add_argument('--unassigned', '-u', dest='assignee', help='show only unassigned items', action='store_const', const='unassigned')
         parser.add_argument('--cached', '-c', dest='cached', help='load items and products from cache', action='store_true', default=False)
         parser.add_argument('--install-hook', dest='installHook', help='install commit-msg hook in current git repository', action='store_true', default=False)
         parser.add_argument('--uninstall-hook', dest='uninstallHook', help='uninstall commit-msg hook in current git repository', action='store_true', default=False)
@@ -321,7 +324,7 @@ through the template configured in the Git config at sprintly.template.
         if not options.cached:
             # populate the cache from the API if possible (may not be possible,
             # e.g. in the case of offline access)
-            self.populateProductsCache()
+            self.populateProductsCache(options.assignee)
 
         products = self.getCache()['products']
         if options.allProducts:
@@ -336,9 +339,9 @@ through the template configured in the Git config at sprintly.template.
                 productId = self.getConfigValue('product')
             products = [products[productId]]
 
-        self.printList(products)
+        self.printList(products, options.assignee)
 
-    def printList(self, products):
+    def printList(self, products, assignee):
         """
         Print a list of Sprint.ly items.
         """
@@ -351,6 +354,19 @@ through the template configured in the Git config at sprintly.template.
         }
 
         itemCount = 0
+
+        userId = self.getUserId()
+
+        def makeAssigneeString(person):
+            if assignee == 'self' and person['id'] == userId or assignee == 'unassigned' and person is None:
+                return ''
+            if person is None:
+                colour = 'YELLOW'
+                name = 'unassigned'
+            else:
+                colour = 'CYAN'
+                name = '%s %s' % (person['first_name'], person['last_name'])
+            return ' ${GREY}(${%s}%s${GREY})${NORMAL}' % (colour, name)
 
         for product in products:
             for item in product['items']:
@@ -377,8 +393,9 @@ through the template configured in the Git config at sprintly.template.
                 for item in items:
                     attr = DIM if item['status'] in ('completed', 'accepted') else None
                     color = ITEM_COLORS.get(item['type'])
+                    assigneeString = makeAssigneeString(item['assigned_to'])
 
-                    printItem = '${%s} #%d${DEFAULT}:${%s} %s' % (color, item['number'], title_color, item['title'])
+                    printItem = '${%s} #%d${DEFAULT}:${%s} %s%s' % (color, item['number'], title_color, item['title'], assigneeString)
                     self.cprint(printItem, attr=attr)
 
                     if 'children' in item:
@@ -388,8 +405,9 @@ through the template configured in the Git config at sprintly.template.
                             title = child['title']
                             if child['status'] == 'in-progress':
                                 title = u'${GREEN}⧁ ${%s}%s' % (title_color, title)
+                            assigneeString = makeAssigneeString(child['assigned_to'])
 
-                            printChild = u'${%s}  #%d${DEFAULT}:${%s} %s' % (childColor, child['number'], title_color, title)
+                            printChild = u'${%s}  #%d${DEFAULT}:${%s} %s%s' % (childColor, child['number'], title_color, title, assigneeString)
                             self.cprint(printChild, attr=attr)
 
             self.cprint('')
@@ -397,7 +415,7 @@ through the template configured in the Git config at sprintly.template.
         if itemCount == 0:
             self.cprint('No assigned items', attr=GREEN)
 
-    def populateProductsCache(self):
+    def populateProductsCache(self, assignee):
         """
         Populate the cache from the Sprint.ly API if possible.
         """
@@ -422,8 +440,16 @@ through the template configured in the Git config at sprintly.template.
             items = []
             offset = 0
             limit = 100
+            if assignee == 'anyone':
+                assigneeString = ''
+            elif assignee == 'self':
+                assigneeString = 'assigned_to=%s&' % self.getUserId()
+            elif assignee == 'unassigned':
+                assigneeString = 'assigned_to=&'
+            else:
+                raise ValueError
             while True:
-                itemsPartial = self.sprintlyAPICall('products/' + productId + '/items.json?assigned_to=' + str(self.getUserId()) + '&children=1&limit=' + str(limit) + '&offset=' + str(offset))
+                itemsPartial = self.sprintlyAPICall('products/' + productId + '/items.json?' + assigneeString + 'children=1&limit=' + str(limit) + '&offset=' + str(offset))
 
                 # if we get nothing, an empty list, an error, quit
                 if not itemsPartial or len(itemsPartial) == 0 or 'code' in items:

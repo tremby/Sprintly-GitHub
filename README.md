@@ -22,7 +22,11 @@ See `sprintly --help` for basic usage instructions.
 
 	optional arguments:
 	  -h, --help        show this help message and exit
-	  --all, -a         show items for all products
+	  --all             show items for all products (default when not in a
+	                    repository)
+	  --self, -s        show only items assigned to you (default)
+	  --anyone, -a      show items assigned to anyone (or unassigned)
+	  --unassigned, -u  show only unassigned items
 	  --cached, -c      load items and products from cache
 	  --install-hook    install commit-msg hook in current git repository
 	  --uninstall-hook  uninstall commit-msg hook in current git repository
