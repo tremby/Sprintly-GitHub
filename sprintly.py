@@ -701,6 +701,141 @@ the message and does not support multiple item numbers.
         return seq[0:-1].strip(string.punctuation) + u'\u2026'
 
 
+class SprintlyCommitHook():
+    def run(self):
+        try:
+            if len(sys.argv) > 1:
+                self.process(commit_msg_path=sys.argv[1])
+            else:
+                # Should never happen, but just in case...
+                raise Exception('Commit message was not received.')
+        except KeyboardInterrupt:
+            die('Program interrupted. Commit aborted.')
+        except Exception as e:
+            die('Error occurred. Commit aborted.')
+
+        # Execute the original commit hook. Note: We don't want realpath because
+        # sprintly links  /usr/local/share/sprintly/commit-msg to
+        # .git/hooks/commit-msg and we want to be in the hooks directory.
+        original_commit_msg = os.path.dirname(sys.argv[0]) + '/commit-msg.original'
+        if os.path.exists(original_commit_msg):
+            sys.exit(subprocess.call([original_commit_msg, sys.argv[1]]))
+        else:
+            sys.exit(0)
+
+    def process(self, commit_msg_path):
+        """
+        Process the commit message. If this method returns,
+        it is assumed the message has been validated. An
+        Exception is the best way to exit in case of error.
+        """
+
+        # read in commit message
+        commit_msg_file = open(commit_msg_path, 'r')
+        commit_msg = commit_msg_file.read()
+        commit_msg_file.close()
+
+        # check to see if message is properly formatted
+        valid = self.validate_message(commit_msg)
+        if valid and len(valid) == 2:
+            new_commit_msg = valid[1]
+        else:
+
+            # present sprint.ly items to user
+            self.display_sprintly_items()
+
+            # prompt user for item(s)
+            items = self.get_sprintly_items()
+
+            # check if they opted out
+            if '0' in items:
+                print 'Proceeding without Sprint.ly item number.'
+                return
+
+            # convert items into string
+            items_string = ' '.join(map(lambda x: 'References #' + str(x) + '.', items))
+
+            # create new commit message
+            new_commit_msg = items_string + ' ' + commit_msg
+
+        # save it (overwrite existing)
+        commit_msg_file = open(commit_msg_path, 'w')
+        commit_msg = commit_msg_file.write(new_commit_msg)
+        commit_msg_file.close()
+
+
+    def validate_message(self, message):
+        """
+        If the message contains (at any position) a sprint.ly
+        keyword followed by a space, pound, number, then accept
+        the message as is and return (True, message).
+
+        If the message begins with a pound, number, prepend
+        message with 'References ' and return (True, modified message).
+
+        Otherwise, return false.
+        """
+
+        messageLower = message.lower()
+        valid_keywords = ['close', 'closes', 'closed', 'fix', 'fixed', 'fixes', 'addresses', 're', 'ref', 'refs', 'references', 'see', 'breaks', 'unfixes', 'reopen', 'reopens', 're-open', 're-opens']
+        try:
+            # match pound-number-(space or period)
+            result = re.match(r'^(#[0-9]+[\.\s$]).*$', message)
+            if result:
+                return (True, 'References %s' % message)
+
+            # match any keyword followed by a pound-number-(space or period)
+            pattern = r'.*\b(' + '|'.join(valid_keywords) + r')\b\s(#[0-9]+([\.\s]|$)).*'
+            result = re.match(pattern, messageLower)
+            if result:
+                return (True, message)
+
+        except Exception as e:
+            pass
+        return False
+
+
+    def display_sprintly_items(self):
+        """
+        Use the sprintly command line tool to display a list of sprintly
+        items.
+        """
+
+        sprintlyTool = SprintlyTool()
+        sprintlyTool.run(sprintlyTool.getOptions([]))
+
+        print '#0 - Proceed without Sprint.ly item number.'
+
+
+    def get_sprintly_items(self):
+        """
+        Ask the user until they give a list of one or more
+        integers delimited by space. Only non-negative
+        integers are allowed. It is acceptable for integers
+        to be preceded by a # symbol.
+        """
+
+        # enable user input
+        sys.stdin = open('/dev/tty', 'r')
+
+        while True:
+            sprintly_items = raw_input('Enter 1 or more item numbers separated by a space: ').split(' ')
+            result = map(lambda x: self.parse_item_number(x), sprintly_items)
+            if not None in result:
+                return result
+
+
+    def parse_item_number(self, s):
+        """
+        Returns the item number from strings of format: '12', '#12'
+        """
+        result = re.match('^#?([0-9]+)$', s)
+        if result:
+            return result.group(1)
+        else:
+            return None
+
+
 class SprintlyException(Exception):
     """
     Exception used to pass known exceptions throughout
