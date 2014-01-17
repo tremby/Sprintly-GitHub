@@ -165,6 +165,9 @@ the message and does not support multiple item numbers.
 
         except KeyboardInterrupt:
             die()
+        except SprintlyException as e:
+            self.cprint(e.value, attr=RED)
+            die()
         except Exception as e:
             die('Fatal Error: %s', e)
 
