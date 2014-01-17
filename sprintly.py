@@ -173,8 +173,7 @@ through the template configured in the Git config at sprintly.template.
             self.cprint(e.value, attr=RED)
             die()
         except Exception as e:
-            if e.value:
-                self.cprint('Fatal error', attr=RED)
+            self.cprint('Fatal error', attr=RED)
             raise
 
     def initialize(self):
