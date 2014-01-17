@@ -140,6 +140,7 @@ through the template configured in the Git config at sprintly.template.
 '''
         parser = argparse.ArgumentParser(description=description, epilog=epilog, formatter_class=argparse.RawDescriptionHelpFormatter)
         parser.add_argument('--all', '-a', dest='allProducts', help='show items for all products', action='store_true', default=False)
+        parser.add_argument('--cached', '-c', dest='cached', help='load items and products from cache', action='store_true', default=False)
         parser.add_argument('--install-hook', dest='installHook', help='install commit-msg hook in current git repository', action='store_true', default=False)
         parser.add_argument('--uninstall-hook', dest='uninstallHook', help='uninstall commit-msg hook in current git repository', action='store_true', default=False)
 
@@ -318,9 +319,10 @@ through the template configured in the Git config at sprintly.template.
         Lists all items for the current user from the Sprint.ly API.
         """
 
-        # populate the cache from the API if possible (may not be possible,
-        # e.g. in the case of offline access)
-        self.populateProductsCache()
+        if not options.cached:
+            # populate the cache from the API if possible (may not be possible,
+            # e.g. in the case of offline access)
+            self.populateProductsCache()
 
         products = self.getCache()['products']
         if options.allProducts:
