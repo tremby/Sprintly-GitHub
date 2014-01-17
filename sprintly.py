@@ -329,10 +329,12 @@ through the template configured in the Git config at sprintly.template.
             products = products.values()
         else:
             try:
-                products = [products[self.getConfigValue('product')]]
+                productId = self.getConfigValue('product')
             except KeyError:
                 self.cprint('This git repository is not yet associated with a Sprint.ly product. You will now be prompted to choose one.', attr=YELLOW)
-                return self.createSprintlyConfig()
+                self.createSprintlyConfig()
+                productId = self.getConfigValue('product')
+            products = [products[productId]]
 
         self.printList(products)
 
