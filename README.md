@@ -54,15 +54,24 @@ or, globally,
 Once these are set, running `sprintly` from anywhere but a Git repository will 
 give a list of all items for this user.
 
+*Note: (1) your Sprint.ly API Key can be found 
+[here](https://sprint.ly/account/profile/). (2) you will only be asked to enter 
+a sprint.ly product id if you have more than one product.*
+
 Running `sprintly` in a directory which is part of a Git repository requires a 
 further configuration key, `sprintly.product` to exist. This could be set 
 globally but you'll likely want it set for each separate repository. If it is 
 not set, the script will fetch products from the Sprint.ly API and offer a 
 choice, then save this in the Git repository configuration for you.
 
-*Note: (1) your Sprint.ly API Key can be found 
-[here](https://sprint.ly/account/profile/). (2) you will only be asked to enter 
-a sprint.ly product id if you have more than one product.*
+Changing the Configuration
+--------------------------
+
+If at some point you wish to change your configuration (you get a new username 
+or API key) just use `git-config` again to update whatever is necessary or edit 
+the configuration files by hand. To choose the Sprint.ly product from the list 
+again you can just remove the `sprintly.product` key with `git config --unset 
+sprintly.product`. See `man git-config` for full details.
 
 GitHub Integration: Installing the `commit-msg` hook
 ----------------------------------------------------
@@ -106,15 +115,6 @@ repository in question and run:
 If `commit-msg.original` exists (for instance if you already had a commit 
 message hook before installing Sprintly-GitHub) it is moved back to 
 `commit-msg`.
-
-Changing the Configuration
---------------------------
-
-If at some point you wish to change your configuration (you get a new username 
-or API key) just use `git-config` again to update whatever is necessary or edit 
-the configuration files by hand. To choose the Sprint.ly product from the list 
-again you can just remove the `sprintly.product` key with `git config --unset 
-sprintly.product`. See `man git-config` for full details.
 
 Sample Output
 -------------
