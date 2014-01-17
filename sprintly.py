@@ -108,7 +108,7 @@ class SprintlyTool:
         """
 
         description = '''\
-Show Sprint.ly tasks assigned to you (for the current project if in a git
+Show Sprint.ly items assigned to you (for the current project if in a git
 repository) or install/uninstall the commit hook.
 '''
         epilog = '''\
@@ -537,8 +537,8 @@ the message and does not support multiple item numbers.
 
     def sprintlyAPICall(self, url):
         """
-        Wraps up a call to the Sprint.ly api. Returns a map representing
-        the JSON response or false if the call could not be completed.
+        Wraps up a call to the Sprint.ly api. Returns a map representing the
+        JSON response or false if the call could not be completed.
         """
 
         url = 'https://sprint.ly/api/%s' % url
@@ -801,8 +801,7 @@ class SprintlyCommitHook:
 
     def display_sprintly_items(self):
         """
-        Use the sprintly command line tool to display a list of sprintly
-        items.
+        Use the sprintly tool to display a list of sprintly items.
         """
 
         sprintlyTool = SprintlyTool()
@@ -842,8 +841,7 @@ class SprintlyCommitHook:
 
 class SprintlyException(Exception):
     """
-    Exception used to pass known exceptions throughout
-    the sprintly tool.
+    Exception used to pass known exceptions throughout the sprintly tool.
     """
     def __init__(self, value):
         self.value = value
