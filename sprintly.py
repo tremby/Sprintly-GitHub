@@ -248,9 +248,6 @@ through the template configured in the Git config at sprintly.template.
         # Try and use API with current credentials to determine validity
         self.getUserId()
 
-        # Get the list of products
-        self.populateProductsCache()
-
         # Prompt user for default product if more than 1
         productMap = {}
 
