@@ -28,6 +28,10 @@ logger = logging.getLogger(__name__)
 HOOK_NAME = 'commit-msg'
 HOOK_DIR = os.path.dirname(__file__)
 ORIGINAL_HOOK_SUFFIX = '.original'
+ACTION_KEYWORDS = ['close', 'closes', 'closed', 'fix', 'fixed', 'fixes', 'addresses', 're', 'ref', 'refs', 'references', 'see', 'breaks', 'unfixes', 'reopen', 'reopens', 're-open', 're-opens']
+ITEM_KEYWORDS = ['#', 'ticket:', 'issue:', 'item:', 'bug:']
+DEFAULT_TEMPLATE = '%(message)s; references %(items)s'
+DEFAULT_ITEM_KEYWORD = '#'
 
 # non-editable constants
 HOOK_PATH = os.path.join(HOOK_DIR, HOOK_NAME)
@@ -117,23 +121,22 @@ Git repository are shown (or all items if not in a repository).
 
 When using the commit-msg hook, you will be prompted for a Sprint.ly item
 number unless you include a Sprint.ly keyword/item number in your commit
-message:
+message (including in later paragraphs):
 
-  'Commit message goes here. References #54. Closes #65.'
+  'Commit message goes here; references #54, closes #65'
 
 Valid Sprint.ly keywords are:
 
   close, closes, closed, fix, fixed, fixes, addresses, re, ref, refs,
   references, see, breaks, unfixes, reopen, reopens, re-open, re-opens
 
-As a shortcut, you may also include an item number as the first word in your
-commit message:
+As a shortcut, you may also item numbers at the start of your commit message:
 
   '#26 Message goes here'
 
-The hook will automatically prepend the keyword 'references' and you won't be
-asked to provide an item number. This shortcut only works at the beginning of
-the message and does not support multiple item numbers.
+If this is present the hook won't prompt for an item number and instead will
+automatically remove the item number and run the message and item numbers
+through the template configured in the Git config at sprintly.template.
 '''
         parser = argparse.ArgumentParser(description=description, epilog=epilog, formatter_class=argparse.RawDescriptionHelpFormatter)
         parser.add_argument('--all', '-a', dest='allProducts', help='show items for all products', action='store_true', default=False)
@@ -702,6 +705,15 @@ the message and does not support multiple item numbers.
 
 
 class SprintlyCommitHook:
+    def __init__(self):
+        self._sprintlyTool = None
+
+    def getSprintlyTool(self):
+        if self._sprintlyTool is not None:
+            return self._sprintlyTool
+        self._sprintlyTool = SprintlyTool()
+        return self._sprintlyTool
+
     def run(self):
         """
         Run the hook
@@ -718,25 +730,21 @@ class SprintlyCommitHook:
         except Exception as e:
             die('Error occurred. Commit aborted.')
 
-        # Execute the original commit hook. Note: We don't want realpath because
-        # sprintly links  /usr/local/share/sprintly/commit-msg to
-        # .git/hooks/commit-msg and we want to be in the hooks directory.
-        original_commit_msg = os.path.dirname(sys.argv[0]) + '/commit-msg.original'
-        if os.path.exists(original_commit_msg):
-            sys.exit(subprocess.call([original_commit_msg, sys.argv[1]]))
-        else:
-            sys.exit(0)
+        # Execute the original commit hook.
+        originalDestination = os.path.join(os.path.dirname(sys.argv[0]), ORIGINAL_HOOK_NAME)
+        if os.path.exists(originalDestination):
+            subprocess.call([originalDestination, sys.argv[1]])
 
     def process(self, commit_msg_path):
         """
-        Process the commit message. If this method returns,
-        it is assumed the message has been validated. An
-        Exception is the best way to exit in case of error.
+        Process the commit message. If this method returns, it is assumed the
+        message has been validated. An Exception is the best way to exit in
+        case of error.
         """
 
         # read in commit message
         commit_msg_file = open(commit_msg_path, 'r')
-        commit_msg = commit_msg_file.read()
+        commit_msg = commit_msg_file.read().strip()
         commit_msg_file.close()
 
         # check to see if message is properly formatted
@@ -752,15 +760,12 @@ class SprintlyCommitHook:
             items = self.get_sprintly_items()
 
             # check if they opted out
-            if '0' in items:
+            if items is None:
                 print 'Proceeding without Sprint.ly item number.'
                 return
 
-            # convert items into string
-            items_string = ' '.join(map(lambda x: 'References #' + str(x) + '.', items))
-
             # create new commit message
-            new_commit_msg = items_string + ' ' + commit_msg
+            new_commit_msg = self.apply_template(commit_msg, items)
 
         # save it (overwrite existing)
         commit_msg_file = open(commit_msg_path, 'w')
@@ -770,73 +775,98 @@ class SprintlyCommitHook:
 
     def validate_message(self, message):
         """
-        If the message contains (at any position) a sprint.ly
-        keyword followed by a space, pound, number, then accept
-        the message as is and return (True, message).
+        If the message begins with a pound and number, remove it, run it
+        through the configured template and return (True, modified message).
 
-        If the message begins with a pound, number, prepend
-        message with 'References ' and return (True, modified message).
+        If the message contains (at any position) a sprint.ly action keyword
+        followed by a space, then a item keyword, then a number, accept the
+        message as is and return (True, message).
 
         Otherwise, return false.
         """
 
-        messageLower = message.lower()
-        valid_keywords = ['close', 'closes', 'closed', 'fix', 'fixed', 'fixes', 'addresses', 're', 'ref', 'refs', 'references', 'see', 'breaks', 'unfixes', 'reopen', 'reopens', 're-open', 're-opens']
-        try:
-            # match pound-number-(space or period)
-            result = re.match(r'^(#[0-9]+[\.\s$]).*$', message)
-            if result:
-                return (True, 'References %s' % message)
+        # Look for pound and numbers at the start of the message
+        result = re.match(r'^#(\d+(?:,#?\d+)*)\s*', message)
+        if result is not None:
+            return (True, self.apply_template(message[len(result.group(0)):], result.group(1).split(',')))
 
-            # match any keyword followed by a pound-number-(space or period)
-            pattern = r'.*\b(' + '|'.join(valid_keywords) + r')\b\s(#[0-9]+([\.\s]|$)).*'
-            result = re.match(pattern, messageLower)
-            if result:
-                return (True, message)
+        # Look for any Sprintly-compatible string
+        regex = re.compile(
+                r'\b' # word break
+                '(?:' + '|'.join(re.escape(kw) for kw in ACTION_KEYWORDS) + ')' # action keyword
+                ' ' # space
+                '(?:' + '|'.join(re.escape(kw) for kw in ITEM_KEYWORDS) + ')' # item keyword
+                r'\d+' # number
+                r'\b' # word break
+                )
+        if regex.search(message.lower()) is not None:
+            return (True, message)
 
-        except Exception as e:
-            pass
         return False
 
+    def apply_template(self, message, items):
+        """
+        Apply the template configured at sprintly.template to the given
+        message and items, using the item keyword configured at
+        sprintly.itemkeyword before item numbers.
+        """
+
+        if len(items) == 0:
+            raise ValueError('Expected at least one item')
+
+        sprintlyTool = self.getSprintlyTool()
+        try:
+            template = sprintlyTool.getConfigValue('template')
+        except KeyError:
+            template = DEFAULT_TEMPLATE
+        try:
+            itemKeyword = sprintlyTool.getConfigValue('itemkeyword')
+        except KeyError:
+            itemKeyword = DEFAULT_ITEM_KEYWORD
+
+        itemString = ', '.join((itemKeyword + item) for item in items)
+        return template % { 'message': message, 'items': itemString }
 
     def display_sprintly_items(self):
         """
         Use the sprintly tool to display a list of sprintly items.
         """
 
-        sprintlyTool = SprintlyTool()
+        sprintlyTool = self.getSprintlyTool()
         sprintlyTool.run(sprintlyTool.getOptions([]))
-
-        print '#0 - Proceed without Sprint.ly item number.'
 
 
     def get_sprintly_items(self):
         """
-        Ask the user until they give a list of one or more
-        integers delimited by space. Only non-negative
-        integers are allowed. It is acceptable for integers
-        to be preceded by a # symbol.
+        Ask the user until they give a list of one or more integers delimited
+        by commas and optionally whitespace. Only non-negative integers are
+        allowed. It is acceptable for integers to be preceded by a # symbol.
         """
 
         # enable user input
         sys.stdin = open('/dev/tty', 'r')
 
         while True:
-            sprintly_items = raw_input('Enter 1 or more item numbers separated by a space: ').split(' ')
-            result = map(lambda x: self.parse_item_number(x), sprintly_items)
-            if not None in result:
-                return result
+            input = raw_input('Enter item numbers separated by commas, or nothing to choose no item: ')
+            if input == '':
+                return None
+            try:
+                return map(lambda x: self.parse_item_number(x), re.split(',', input))
+            except:
+                # Try again
+                print 'Ensure item numbers are comma-separated'
+                pass
 
 
     def parse_item_number(self, s):
         """
-        Returns the item number from strings of format: '12', '#12'
+        Returns the item number from strings of format: '12', '#12'.
+        Whitespace is trimmed from the beginning and end.
         """
-        result = re.match('^#?([0-9]+)$', s)
-        if result:
-            return result.group(1)
-        else:
-            return None
+        result = re.match('^#?(\d+)$', s.strip())
+        if result is None:
+            raise ValueError
+        return result.group(1)
 
 
 class SprintlyException(Exception):
